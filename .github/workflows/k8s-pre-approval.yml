@@ -1,0 +1,62 @@
+name: Plan Declarative Migrations
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/k8s-pre-approve.yaml
+      - 'preapproval-k8s/*'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/k8s-pre-approve.yaml
+      - 'preapproval-k8s/*'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  plan:
+    name: plan
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@master
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+      - name: Run schema plan
+        uses: ariga/atlas-action/schema/plan@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          working-directory: preapproval-k8s
+          from: ${{ secrets.DB_URL }}
+          env: ci
+  approve-push:
+    name: approve-push
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+      - name: Approve the plan
+        id: plan-approve
+        uses: ariga/atlas-action/schema/plan/approve@master
+        with:
+          env: ci
+          working-directory: preapproval-k8s
+          from: ${{ secrets.DB_URL }}
+      - name: Push the schema
+        id: schema-push
+        uses: ariga/atlas-action/schema/push@master
+        with:
+          env: ci
+          working-directory: preapproval-k8s
